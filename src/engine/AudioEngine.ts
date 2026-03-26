@@ -628,7 +628,6 @@ export class AudioEngine {
       return total + clip.settings.duration * tempoFactor;
     }, 0);
   }
-}
 
   // ── Auto-calibration ────────────────────────────────────────────────────────
 
@@ -701,3 +700,4 @@ export class AudioEngine {
       rowEnergy,
     };
   }
+}
