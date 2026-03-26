@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0a0a0f;
+  --surface: #12121a;
+  --surface-light: #1a1a24;
+  --primary: #6366f1;
+  --accent: #8b5cf6;
+  --text: #e2e8f0;
+  --text-dim: #64748b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--surface-light);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+}
+
+canvas {
+  image-rendering: pixelated;
+}
+
+.btn-primary {
+  @apply px-4 py-2 bg-primary text-white rounded font-medium transition-all hover:bg-accent;
+}
+
+.btn-secondary {
+  @apply px-4 py-2 bg-surface-light rounded font-medium border border-white/10 transition-all hover:bg-primary/20;
+  color: var(--text);
+}
