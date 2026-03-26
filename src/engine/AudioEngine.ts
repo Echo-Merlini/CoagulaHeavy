@@ -239,6 +239,22 @@ export class AudioEngine {
         }
 
         const y = renderY + relY;
+
+        // Pre-pass: skip rows with no significant pixel energy (saves synthesis time)
+        let rowHasEnergy = false;
+        for (let relX = 0; relX < renderWidth; relX++) {
+          const x = renderX + relX;
+          const idx = (y * imgWidth + x) * 4;
+          if (data[idx] > 2 || data[idx + 1] > 2 || data[idx + 2] > 2) {
+            rowHasEnergy = true;
+            break;
+          }
+        }
+        if (!rowHasEnergy) {
+          processedRows++;
+          continue;
+        }
+
         const baseFrequency = this.frequencyFromY(relY, renderHeight, lowFrequency, highFrequency);
         const frequency = baseFrequency * pitchMultiplier;
         const phase = Math.random() * Math.PI * 2;
@@ -613,3 +629,75 @@ export class AudioEngine {
     }, 0);
   }
 }
+
+  // ── Auto-calibration ────────────────────────────────────────────────────────
+
+  /**
+   * Analyse per-row brightness energy in the image.
+   * Returns a Float32Array of length imageData.height where each value is the
+   * mean luminance (0–1) for that row.
+   */
+  analyzeRowEnergy(imageData: ImageData, selection?: Selection | null): Float32Array {
+    const x0 = selection?.x ?? 0;
+    const y0 = selection?.y ?? 0;
+    const w  = selection?.width  ?? imageData.width;
+    const h  = selection?.height ?? imageData.height;
+    const data = imageData.data;
+    const iw   = imageData.width;
+
+    const energy = new Float32Array(h);
+    for (let relY = 0; relY < h; relY++) {
+      let sum = 0;
+      for (let relX = 0; relX < w; relX++) {
+        const idx = ((y0 + relY) * iw + (x0 + relX)) * 4;
+        // Perceptual luminance weights
+        sum += data[idx] * 0.2126 + data[idx + 1] * 0.7152 + data[idx + 2] * 0.0722;
+      }
+      energy[relY] = sum / (w * 255);
+    }
+    return energy;
+  }
+
+  /**
+   * Given an image, compute the pitch offset (semitones) needed to shift the
+   * energy centre-of-mass to targetFrequency within the current frequency range.
+   *
+   * Useful for the 3–15 kHz sweet-spot: pass targetFrequency = 7000.
+   * Returns { pitchSemitones, currentCentreHz, targetHz, rowEnergy }.
+   */
+  getAutoPitch(
+    imageData: ImageData,
+    targetFrequency = 7000,
+    selection?: Selection | null
+  ): { pitchSemitones: number; currentCentreHz: number; targetHz: number; rowEnergy: Float32Array } {
+    const rowEnergy = this.analyzeRowEnergy(imageData, selection);
+    const h = rowEnergy.length;
+    const { lowFrequency, highFrequency } = this.settings;
+
+    // Weighted centre-of-mass in normalised Y (0 = top, 1 = bottom)
+    let totalEnergy = 0;
+    let weightedY   = 0;
+    for (let y = 0; y < h; y++) {
+      totalEnergy += rowEnergy[y];
+      weightedY   += rowEnergy[y] * (y / h);
+    }
+    const centreY = totalEnergy > 0 ? weightedY / totalEnergy : 0.5;
+
+    // Map centreY → frequency using the current scale
+    const currentCentreHz = this.frequencyFromY(
+      Math.round(centreY * h),
+      h,
+      lowFrequency,
+      highFrequency
+    );
+
+    // Semitones needed to shift currentCentreHz → targetFrequency
+    const pitchSemitones = 12 * Math.log2(targetFrequency / currentCentreHz);
+
+    return {
+      pitchSemitones: Math.round(pitchSemitones * 10) / 10, // 0.1 semitone resolution
+      currentCentreHz,
+      targetHz: targetFrequency,
+      rowEnergy,
+    };
+  }
