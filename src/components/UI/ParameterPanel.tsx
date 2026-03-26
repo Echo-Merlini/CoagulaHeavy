@@ -39,6 +39,18 @@ export const ParameterPanel: React.FC<ParameterPanelProps> = memo(({ audioEngine
   const { project, actions } = useStore();
   const { settings } = project;
   const [autoPitchHint, setAutoPitchHint] = useState<string | null>(null);
+  const [autoTempoHint, setAutoTempoHint] = useState<string | null>(null);
+
+  const handleAutoTempo = useCallback(() => {
+    const imageData = (useStore.getState() as any).canvas?.imageData as ImageData | null;
+    const canvasWidth = imageData?.width ?? settings.width;
+    // Target 100 px/s: each canvas pixel = 10ms. Adjust for current tempo.
+    const targetPxPerSec = 100;
+    const newDuration = Math.round((canvasWidth / targetPxPerSec) * (settings.tempo / 120) * 10) / 10;
+    actions.setSettings({ duration: newDuration });
+    setAutoTempoHint(`${canvasWidth}px → ${newDuration}s  (${targetPxPerSec}px/s)`);
+    setTimeout(() => setAutoTempoHint(null), 4000);
+  }, [settings.width, settings.tempo, actions]);
 
   const handleAutoPitch = useCallback(() => {
     const imageData = (useStore.getState() as any).canvas?.imageData as ImageData | null;
@@ -166,11 +178,24 @@ export const ParameterPanel: React.FC<ParameterPanelProps> = memo(({ audioEngine
                   type="number"
                   step="0.1"
                   value={settings.duration}
-                  onChange={(e) => actions.setSettings({ 
-                    duration: Number(e.target.value) 
+                  onChange={(e) => actions.setSettings({
+                    duration: Number(e.target.value)
                   })}
                   className="w-full px-3 py-2 bg-surface-light rounded border border-white/10 text-text text-sm focus:border-primary outline-none"
                 />
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-[10px] text-text-dim">Spectrogram sync</span>
+                  <button
+                    onClick={handleAutoTempo}
+                    title="Auto-set duration so spectrogram scrolls at 100 px/s matching canvas"
+                    className="text-[10px] px-2 py-0.5 rounded bg-primary/20 text-primary hover:bg-primary/40 transition-colors font-medium"
+                  >
+                    Auto ⏱
+                  </button>
+                </div>
+                {autoTempoHint && (
+                  <div className="text-[10px] text-emerald-400 mt-1">{autoTempoHint}</div>
+                )}
               </div>
               <div>
                 <EnhancedSlider

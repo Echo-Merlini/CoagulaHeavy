@@ -14,6 +14,8 @@ export const SpectralAnalyzer: React.FC<SpectralAnalyzerProps> = memo(({ audioEn
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const spectrogramRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number | null>(null);
+  const lastAudioTimeRef = useRef(0);
+  const pixelAccumRef = useRef(0);
   const [viewMode, setViewMode] = useState<ViewMode>('spectrum');
   const [isPopupOpen, setIsPopupOpen] = useState(false);
 
@@ -163,13 +165,19 @@ export const SpectralAnalyzer: React.FC<SpectralAnalyzerProps> = memo(({ audioEn
   //   - Bottom of display = high frequencies (matches bottom of image canvas)
   // This is inverted from traditional audio spectrogram convention but ensures
   // the spectrogram visually matches what's drawn on the image canvas.
-  const drawSpectrogram = useCallback((ctx: CanvasRenderingContext2D, frequencyData: Uint8Array) => {
+  //
+  // shift: how many pixels to scroll left this frame (time-synced to audio).
+  const drawSpectrogram = useCallback((ctx: CanvasRenderingContext2D, frequencyData: Uint8Array, shift: number) => {
     const width = ctx.canvas.width;
     const height = ctx.canvas.height;
 
-    // Shift existing image left
-    const imageData = ctx.getImageData(1, 0, width - 1, height);
-    ctx.putImageData(imageData, 0, 0);
+    if (shift >= 1) {
+      // Shift existing image left by `shift` pixels
+      const imageData = ctx.getImageData(shift, 0, width - shift, height);
+      ctx.putImageData(imageData, 0, 0);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(width - shift, 0, shift, height);
+    }
 
     // Draw new column on the right
     const binCount = frequencyData.length;
@@ -221,7 +229,9 @@ export const SpectralAnalyzer: React.FC<SpectralAnalyzerProps> = memo(({ audioEn
     const spectrogramCtx = spectrogramCanvas?.getContext('2d');
     if (!ctx) return;
 
-    // Initialize spectrogram canvas
+    // Initialize spectrogram canvas and reset timing
+    lastAudioTimeRef.current = 0;
+    pixelAccumRef.current = 0;
     if (spectrogramCtx && viewMode === 'spectrogram') {
       spectrogramCtx.fillStyle = '#000';
       spectrogramCtx.fillRect(0, 0, spectrogramCanvas!.width, spectrogramCanvas!.height);
@@ -241,7 +251,16 @@ export const SpectralAnalyzer: React.FC<SpectralAnalyzerProps> = memo(({ audioEn
       } else if (viewMode === 'waveform') {
         drawWaveform(ctx, timeData);
       } else if (viewMode === 'spectrogram' && spectrogramCtx) {
-        drawSpectrogram(spectrogramCtx, frequencyData);
+        // Compute time-synced pixel shift so spectrogram matches canvas 1:1
+        const currentTime = audioEngine.getCurrentTime();
+        const effectiveDuration = audioEngine.getEffectiveDuration();
+        const delta = currentTime - lastAudioTimeRef.current;
+        lastAudioTimeRef.current = currentTime;
+        pixelAccumRef.current += delta * (spectrogramCanvas!.width / effectiveDuration);
+        const shift = Math.max(0, Math.floor(pixelAccumRef.current));
+        pixelAccumRef.current -= shift;
+
+        drawSpectrogram(spectrogramCtx, frequencyData, shift);
         // Also draw mini spectrum at bottom
         ctx.fillStyle = '#0a0a0f';
         ctx.fillRect(0, 0, canvas.width, canvas.height);

@@ -719,8 +719,13 @@ export const Spectrograph3D: React.FC<Spectrograph3DProps> = memo(({
   const { isPlaying } = render;
   const { lowFrequency, highFrequency } = project.settings;
 
-  // Number of time slices to keep in history
-  const maxTimeSlices = useMemo(() => Math.floor(60 * settings.timeScale), [settings.timeScale]);
+  // Number of time slices: cover exactly effectiveDuration seconds of audio
+  // so the 3D time axis matches the canvas width 1:1
+  const effectiveDuration = audioEngine?.getEffectiveDuration() ?? 10;
+  const maxTimeSlices = useMemo(
+    () => Math.max(10, Math.floor(45 * effectiveDuration * settings.timeScale)),
+    [effectiveDuration, settings.timeScale]
+  );
 
   // Animation loop to collect frequency data
   useEffect(() => {

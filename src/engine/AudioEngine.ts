@@ -16,11 +16,11 @@ export class AudioEngine {
   private settings: ProjectSettings;
   private oscillators: OscillatorNode[] = [];
   private noiseNodes: AudioBufferSourceNode[] = [];
-  private startTime: number = 0;
   private abortController: AbortController | null = null;
   private currentSource: AudioBufferSourceNode | null = null;
   private isLooping: boolean = false;
   private onPlaybackEnd: (() => void) | null = null;
+  private playbackStartTime: number = 0;
 
   constructor(settings: ProjectSettings) {
     this.settings = settings;
@@ -53,7 +53,7 @@ export class AudioEngine {
     await this.context!.resume();
     this.isPlaying = true;
     this.isLooping = options.loop ?? false;
-    this.startTime = this.context!.currentTime;
+
 
     // Use async synthesis to avoid blocking UI
     const channels = await this.synthesizeAsync(imageData, options);
@@ -385,6 +385,7 @@ export class AudioEngine {
     source.loop = this.isLooping;
     source.connect(this.masterGain!);
     source.start();
+    this.playbackStartTime = this.context!.currentTime;
 
     this.currentSource = source;
 
@@ -423,6 +424,12 @@ export class AudioEngine {
 
   getSampleRate(): number {
     return this.context?.sampleRate ?? this.settings.sampleRate;
+  }
+
+  getCurrentTime(): number {
+    if (!this.context || !this.isPlaying) return 0;
+    const elapsed = this.context.currentTime - this.playbackStartTime;
+    return Math.max(0, Math.min(elapsed, this.getEffectiveDuration()));
   }
 
   getEffectiveDuration(): number {
@@ -489,11 +496,6 @@ export class AudioEngine {
     for (let i = 0; i < string.length; i++) {
       view.setUint8(offset + i, string.charCodeAt(i));
     }
-  }
-
-  getCurrentTime(): number {
-    if (!this.context || !this.isPlaying) return 0;
-    return this.context.currentTime - this.startTime;
   }
 
   getIsPlaying(): boolean {
@@ -594,7 +596,7 @@ export class AudioEngine {
     await this.context!.resume();
     this.isPlaying = true;
     this.isLooping = options.loop ?? false;
-    this.startTime = this.context!.currentTime;
+
 
     // Render the entire timeline
     const channels = await this.renderTimeline(clips, options);
