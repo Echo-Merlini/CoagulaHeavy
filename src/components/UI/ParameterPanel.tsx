@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, memo } from 'react';
+import React, { lazy, Suspense, memo, useState, useCallback } from 'react';
 import { useStore } from '../../store';
 import { EnhancedSlider } from './EnhancedSlider';
 import { CollapsibleSection } from './CollapsibleSection';
@@ -38,6 +38,22 @@ interface ParameterPanelProps {
 export const ParameterPanel: React.FC<ParameterPanelProps> = memo(({ audioEngine }) => {
   const { project, actions } = useStore();
   const { settings } = project;
+  const [autoPitchHint, setAutoPitchHint] = useState<string | null>(null);
+
+  const handleAutoPitch = useCallback(() => {
+    const imageData = (useStore.getState() as any).canvas?.imageData as ImageData | null;
+    if (!imageData || !audioEngine) {
+      setAutoPitchHint('Load an image first');
+      setTimeout(() => setAutoPitchHint(null), 3000);
+      return;
+    }
+    const result = audioEngine.getAutoPitch(imageData, 7000);
+    const clamped = Math.max(-48, Math.min(48, Math.round(result.pitchSemitones)));
+    actions.setSettings({ pitch: clamped });
+    const sign = clamped >= 0 ? '+' : '';
+    setAutoPitchHint(sign + clamped + ' st — centre was ' + Math.round(result.currentCentreHz) + ' Hz → 7 kHz');
+    setTimeout(() => setAutoPitchHint(null), 4000);
+  }, [audioEngine, actions]);
 
   return (
     <div className="w-80 bg-surface border-l border-white/10 overflow-y-auto">
@@ -190,9 +206,21 @@ export const ParameterPanel: React.FC<ParameterPanelProps> = memo(({ audioEngine
                   return `${sign}${v}`;
                 }}
               />
-              <div className="text-[10px] text-text-dim mt-1">
-                Range: -48 to +48 (±4 octaves)
+              <div className="flex items-center justify-between mt-1">
+                <span className="text-[10px] text-text-dim">Range: -48 to +48 (±4 octaves)</span>
+                <button
+                  onClick={handleAutoPitch}
+                  title="Auto-tune: centres image energy at 3–15 kHz sweet spot"
+                  className="text-[10px] px-2 py-0.5 rounded bg-primary/20 text-primary hover:bg-primary/40 transition-colors font-medium"
+                >
+                  Auto ✦
+                </button>
               </div>
+              {autoPitchHint && (
+                <div className="text-[10px] text-emerald-400 mt-1">
+                  {autoPitchHint}
+                </div>
+              )}
             </div>
 
             <label className="flex items-center gap-2 cursor-pointer">
